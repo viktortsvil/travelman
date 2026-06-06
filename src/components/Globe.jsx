@@ -1,11 +1,5 @@
 /**
- * 3D globe with multi-flight animation driven by a simulation clock.
- *
- * Props:
- *   resolvedFlights — validated flights from the schedule table
- *   simStartUtcMs   — UTC instant when simulation begins (null = not started)
- *   playing         — whether the simulation clock is advancing
- *   onSimTimeChange — optional callback with current sim UTC ms (for HUD)
+ * 3D globe with multi-flight animation driven by a trip clock.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -16,7 +10,9 @@ import {
   Cartesian2,
   Color,
   CallbackProperty,
-  PolylineGlowMaterialProperty,
+  ColorMaterialProperty,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
@@ -27,79 +23,85 @@ import {
   groupFlightsByUser,
 } from "../utils/flightUtils.js";
 import {
-  positionAlongFlight,
   buildRoutePositions,
-  headingForFlight,
+  headingForPersonState,
+  positionForPersonState,
+  surfaceNormalAt,
+  unwrapRotation,
 } from "../utils/geoUtils.js";
-import { formatUtcMs } from "../utils/timeUtils.js";
 import "./Globe.css";
 
-/** Build a plane SVG tinted to a given color (one plane per person). */
+const planeSvgCache = new Map();
 function planeSvg(color) {
-  return `data:image/svg+xml,${encodeURIComponent(`
+  if (!planeSvgCache.has(color)) {
+    planeSvgCache.set(
+      color,
+      `data:image/svg+xml,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <g transform="translate(32 32) rotate(-90)">
+  <g transform="translate(32 32)">
     <path fill="${color}" stroke="#1a1a2e" stroke-width="2"
       d="M0 -24 L6 8 L22 14 L22 20 L6 16 L0 24 L-6 16 L-22 20 L-22 14 L-6 8 Z"/>
   </g>
 </svg>
-`)}`;
+`)}`,
+    );
+  }
+  return planeSvgCache.get(color);
 }
+
+const HUD_UPDATE_MS = 250;
 
 export default function Globe({
   resolvedFlights,
-  simStartUtcMs,
+  seekUtcMs,
   playing,
-  onSimClockUpdate,
-  onTogglePlaying,
-  simDate,
-  simTime,
-  onSimDateChange,
-  onSimTimeInputChange,
-  onRun,
+  tripActive = false,
+  tripDate,
+  tripTime,
+  onTripDateChange,
+  onTripTimeChange,
+  onTripClockChange,
+  onPlayPause,
   runErrors,
-  simSettingsReadOnly = false,
   runDisabled = false,
   runHint,
+  travelerNames = new Map(),
 }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
+  const clickHandlerRef = useRef(null);
 
-  // Simulation clock — stored in refs so the RAF loop doesn't trigger re-renders
-  const simTimeRef = useRef(null);
+  const tripTimeRef = useRef(null);
   const playingRef = useRef(playing);
   const lastFrameRef = useRef(null);
+  const lastHudUpdateRef = useRef(0);
   const rafRef = useRef(null);
 
-  // Per-person plane state (position fraction + active leg), updated each frame
   const personPlaneRef = useRef({});
   const flightsByUserRef = useRef(new Map());
   const userColorsRef = useRef(new Map());
-
-  // Cesium entity ids we created (for cleanup on schedule change)
+  const travelerNamesRef = useRef(travelerNames);
   const entityKeysRef = useRef([]);
+  const planeRotationRef = useRef(new Map());
 
-  const [displaySimTime, setDisplaySimTime] = useState(null);
+  const [hoveredTraveler, setHoveredTraveler] = useState(null);
 
   playingRef.current = playing;
+  travelerNamesRef.current = travelerNames;
 
-  /** Reset simulation clock when user clicks Run with a new start time. */
   useEffect(() => {
-    if (simStartUtcMs != null) {
-      simTimeRef.current = simStartUtcMs;
-      setDisplaySimTime(simStartUtcMs);
-      onSimClockUpdate?.(simStartUtcMs);
+    if (seekUtcMs == null) return;
 
-      for (const [userId, flights] of flightsByUserRef.current) {
-        personPlaneRef.current[userId] = getPersonPlaneState(
-          flights,
-          simStartUtcMs,
-        );
-      }
+    tripTimeRef.current = seekUtcMs;
+    onTripClockChange?.(seekUtcMs);
+
+    for (const [userId, flights] of flightsByUserRef.current) {
+      personPlaneRef.current[userId] = getPersonPlaneState(flights, seekUtcMs);
     }
-  }, [simStartUtcMs, onSimClockUpdate]);
 
-  /** Rebuild globe entities whenever the resolved flight list changes. */
+    viewerRef.current?.scene.requestRender();
+  }, [seekUtcMs, onTripClockChange]);
+
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -109,16 +111,18 @@ export default function Globe({
     }
     entityKeysRef.current = [];
     personPlaneRef.current = {};
+    planeRotationRef.current.clear();
+    setHoveredTraveler(null);
 
     const flightsByUser = groupFlightsByUser(resolvedFlights);
     const userColors = assignUserColors([...flightsByUser.keys()]);
     flightsByUserRef.current = flightsByUser;
     userColorsRef.current = userColors;
 
-    const simUtcMs = simTimeRef.current ?? simStartUtcMs;
+    const tripUtcMs = tripTimeRef.current ?? seekUtcMs;
     for (const [userId, flights] of flightsByUser) {
-      if (simUtcMs != null) {
-        personPlaneRef.current[userId] = getPersonPlaneState(flights, simUtcMs);
+      if (tripUtcMs != null) {
+        personPlaneRef.current[userId] = getPersonPlaneState(flights, tripUtcMs);
       }
     }
 
@@ -136,19 +140,15 @@ export default function Globe({
         polyline: {
           positions: buildRoutePositions(flight.from, flight.to),
           width: 2,
-          material: new PolylineGlowMaterialProperty({
-            glowPower: 0.12,
-            color: Color.fromCssColorString(color).withAlpha(0.7),
-          }),
+          material: new ColorMaterialProperty(
+            Color.fromCssColorString(color).withAlpha(0.75),
+          ),
         },
       });
 
       viewer.entities.add({
         id: fromId,
-        position: Cartesian3.fromDegrees(
-          flight.from.lon,
-          flight.from.lat,
-        ),
+        position: Cartesian3.fromDegrees(flight.from.lon, flight.from.lat),
         point: {
           pixelSize: 8,
           color: Color.GOLD,
@@ -202,30 +202,37 @@ export default function Globe({
         ),
         position: new CallbackProperty(() => {
           const state = personPlaneRef.current[userId];
-          if (!state) return Cartesian3.ZERO;
-          return positionAlongFlight(
-            state.flight.from,
-            state.flight.to,
-            state.progress,
-          );
+          return positionForPersonState(state) ?? Cartesian3.ZERO;
         }, false),
         billboard: {
           image: planeSvg(color),
-          width: 40,
-          height: 40,
+          width: 48,
+          height: 48,
           rotation: new CallbackProperty(() => {
             const state = personPlaneRef.current[userId];
             if (!state) return 0;
-            return -headingForFlight(state.flight.from, state.flight.to);
+            const heading = headingForPersonState(state);
+            const rotation = unwrapRotation(
+              planeRotationRef.current.get(userId),
+              heading,
+            );
+            planeRotationRef.current.set(userId, rotation);
+            return rotation;
           }, false),
-          alignedAxis: Cartesian3.UNIT_Z,
+          alignedAxis: new CallbackProperty(() => {
+            const state = personPlaneRef.current[userId];
+            const position = positionForPersonState(state);
+            if (!position) return Cartesian3.UNIT_Z;
+            return surfaceNormalAt(position);
+          }, false),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
     }
-  }, [resolvedFlights, simStartUtcMs]);
 
-  /** Create the Cesium viewer once on mount. */
+    viewer.scene.requestRender();
+  }, [resolvedFlights, seekUtcMs]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -240,7 +247,20 @@ export default function Globe({
       fullscreenButton: false,
       infoBox: false,
       selectionIndicator: false,
+      requestRenderMode: true,
+      maximumRenderTimeChange: Infinity,
+      targetFrameRate: 30,
+      useBrowserRecommendedResolution: true,
     });
+
+    const scene = viewer.scene;
+    scene.globe.maximumScreenSpaceError = 2;
+    scene.globe.tileCacheSize = 300;
+    scene.fog.enabled = false;
+    scene.skyAtmosphere.show = false;
+    scene.globe.showGroundAtmosphere = false;
+    scene.moon.show = false;
+    if (scene.sun) scene.sun.show = false;
 
     viewer.imageryLayers.removeAll();
     viewer.imageryLayers.addImageryProvider(
@@ -255,21 +275,57 @@ export default function Globe({
 
     viewerRef.current = viewer;
 
-    /** Advance simulation clock and update each person's plane. */
+    const hoverHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+    hoverHandler.setInputAction((movement) => {
+      const picked = viewer.scene.pick(movement.endPosition);
+      const entityId = picked?.id?.id;
+      if (typeof entityId === "string" && entityId.startsWith("plane-")) {
+        const userId = entityId.slice("plane-".length);
+        setHoveredTraveler({
+          name: travelerNamesRef.current.get(userId) ?? "Traveler",
+          x: movement.endPosition.x,
+          y: movement.endPosition.y,
+        });
+        viewer.canvas.style.cursor = "pointer";
+      } else {
+        setHoveredTraveler(null);
+        viewer.canvas.style.cursor = "";
+      }
+    }, ScreenSpaceEventType.MOUSE_MOVE);
+    clickHandlerRef.current = hoverHandler;
+
+    const clearHover = () => {
+      setHoveredTraveler(null);
+      if (!viewer.isDestroyed()) {
+        viewer.canvas.style.cursor = "";
+      }
+    };
+    containerRef.current.addEventListener("mouseleave", clearHover);
+
     const tick = (timestamp) => {
-      if (lastFrameRef.current != null && playingRef.current && simTimeRef.current != null) {
+      const viewerInstance = viewerRef.current;
+
+      if (
+        lastFrameRef.current != null &&
+        playingRef.current &&
+        tripTimeRef.current != null
+      ) {
         const realDeltaMs = timestamp - lastFrameRef.current;
-        simTimeRef.current += realDeltaMs * SIM_MS_PER_REAL_MS;
+        tripTimeRef.current += realDeltaMs * SIM_MS_PER_REAL_MS;
 
         for (const [userId, flights] of flightsByUserRef.current) {
           personPlaneRef.current[userId] = getPersonPlaneState(
             flights,
-            simTimeRef.current,
+            tripTimeRef.current,
           );
         }
 
-        setDisplaySimTime(simTimeRef.current);
-        onSimClockUpdate?.(simTimeRef.current);
+        if (timestamp - lastHudUpdateRef.current >= HUD_UPDATE_MS) {
+          lastHudUpdateRef.current = timestamp;
+          onTripClockChange?.(tripTimeRef.current);
+        }
+
+        viewerInstance?.scene.requestRender();
       }
 
       lastFrameRef.current = timestamp;
@@ -278,71 +334,78 @@ export default function Globe({
 
     rafRef.current = requestAnimationFrame(tick);
 
+    const resizeObserver = new ResizeObserver(() => {
+      if (viewer.isDestroyed()) return;
+      viewer.resize();
+      viewer.scene.requestRender();
+    });
+    resizeObserver.observe(containerRef.current);
+
     return () => {
+      resizeObserver.disconnect();
+      containerRef.current?.removeEventListener("mouseleave", clearHover);
+      hoverHandler.destroy();
+      clickHandlerRef.current = null;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       viewer.destroy();
       viewerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- viewer init only once
   }, []);
+
+  const playPauseLabel = playing
+    ? "Pause"
+    : seekUtcMs != null
+      ? "Resume"
+      : "Run";
+
+  const tripStartLocked = playing;
 
   return (
     <div className="globe-root">
       <div ref={containerRef} className="globe-viewer" />
 
+      {hoveredTraveler && (
+        <div
+          className="globe-traveler-tooltip"
+          style={{
+            left: hoveredTraveler.x + 14,
+            top: hoveredTraveler.y + 14,
+          }}
+        >
+          {hoveredTraveler.name}
+        </div>
+      )}
+
       <div className="globe-controls">
         <div className="globe-controls__group">
-          <span className="globe-controls__label">Sim start (UTC)</span>
+          <p className="globe-controls__label">
+            {tripActive ? "Trip time (UTC)" : "Trip start (UTC)"}
+          </p>
           <input
             type="date"
             className="globe-input"
-            value={simDate}
-            onChange={(e) => onSimDateChange(e.target.value)}
-            disabled={simSettingsReadOnly}
-            readOnly={simSettingsReadOnly}
-            title={
-              simSettingsReadOnly
-                ? "Edit in the group panel"
-                : undefined
-            }
+            value={tripDate}
+            onChange={(e) => onTripDateChange(e.target.value)}
+            disabled={tripStartLocked}
+            title={tripStartLocked ? "Pause the trip to change time" : undefined}
           />
           <input
             type="time"
             className="globe-input"
-            value={simTime}
-            onChange={(e) => onSimTimeInputChange(e.target.value)}
-            disabled={simSettingsReadOnly}
-            readOnly={simSettingsReadOnly}
-            title={
-              simSettingsReadOnly
-                ? "Edit in the group panel"
-                : undefined
-            }
+            value={tripTime}
+            step="1"
+            onChange={(e) => onTripTimeChange(e.target.value)}
+            disabled={tripStartLocked}
+            title={tripStartLocked ? "Pause the trip to change time" : undefined}
           />
           <button
             type="button"
             className="globe-btn globe-btn--primary"
-            onClick={onRun}
-            disabled={runDisabled}
+            onClick={onPlayPause}
+            disabled={seekUtcMs == null && runDisabled}
           >
-            Run
+            {playPauseLabel}
           </button>
-        </div>
-
-        <div className="globe-controls__group">
-          <button
-            type="button"
-            className="globe-btn"
-            onClick={onTogglePlaying}
-            disabled={simStartUtcMs == null}
-          >
-            {playing ? "Pause" : "Resume"}
-          </button>
-          {displaySimTime != null && (
-            <span className="globe-sim-time">
-              Sim: {formatUtcMs(displaySimTime)}
-            </span>
-          )}
         </div>
 
         {runErrors.length > 0 && (
@@ -350,12 +413,18 @@ export default function Globe({
         )}
 
         {runHint && (
-          <span className="globe-hint globe-hint--interactive">{runHint}</span>
+          <p className="globe-hint globe-controls__label globe-hint--interactive">{runHint}</p>
         )}
 
-        <span className="globe-hint">
-          Drag to rotate · Scroll to zoom · 3 h flight time = 1 s real time
-        </span>
+        <p className="globe-hint globe-controls__label">
+          Drag to rotate · Scroll to zoom
+        </p>
+        <p className="globe-hint globe-controls__label">
+          1 h trip time = 1 s real time
+        </p>
+        <p className="globe-hint globe-controls__label">
+          Hover a plane to see who it is
+        </p>
       </div>
     </div>
   );

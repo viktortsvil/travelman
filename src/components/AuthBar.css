@@ -1,7 +1,7 @@
 .auth-bar {
   position: absolute;
   top: 16px;
-  right: 72px;
+  right: 16px;
   z-index: 20;
   display: flex;
   align-items: center;

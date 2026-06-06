@@ -1,15 +1,18 @@
 /**
  * Flight schedule resolution and in-flight position math.
  *
- * Simulation speed: 3 hours of flight time elapse per 1 real second.
+ * Simulation speed: 1 hour of trip time elapses per 1 real second.
  * Plane speed along the great-circle route is constant (linear in time).
  */
 
 import { lookupAirport } from "./airportData.js";
 import { localDateTimeToUtcMs } from "./timeUtils.js";
 
-/** 3 hours of simulated time per 1 real second → multiplier on wall-clock delta. */
-export const SIM_MS_PER_REAL_MS = 3 * 60 * 60;
+/** 1 hour of trip time per 1 real second → multiplier on wall-clock delta. */
+export const SIM_MS_PER_REAL_MS = 1 * 60 * 60;
+
+/** Altitude (m) for airports, transfers, and route endpoints. */
+export const GROUND_ALTITUDE_M = 0;
 
 /** Cruise altitude in meters; tweak for higher/lower arcs. */
 export const CRUISE_ALTITUDE_M = 10_000;
@@ -152,7 +155,28 @@ export function resolveAllFlights(rows) {
     if (result.flight) flights.push(result.flight);
   });
 
-  return { flights, errors };
+  return { flights, errors: [...errors, ...validateFlightSequences(flights)] };
+}
+
+/** Ensure a traveler's flights do not overlap in time. */
+export function validateFlightSequences(flights) {
+  const errors = [];
+  const byUser = groupFlightsByUser(flights);
+
+  for (const userFlights of byUser.values()) {
+    const sorted = [...userFlights].sort((a, b) => a.departUtcMs - b.departUtcMs);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const next = sorted[i];
+      if (next.departUtcMs < prev.arriveUtcMs) {
+        errors.push(
+          `${prev.label} overlaps with ${next.label} — a flight cannot start before the previous one lands.`,
+        );
+      }
+    }
+  }
+
+  return errors;
 }
 
 /**
@@ -203,28 +227,98 @@ export function assignUserColors(userIds) {
 }
 
 /**
- * One plane per person: waiting at the next origin, flying the active leg,
- * or parked at the final destination when all legs are done.
+ * One plane per person: waiting, flying, ground transfer between legs,
+ * or parked at the final destination.
  *
- * @returns {{ flight: object, progress: number, mode: "waiting" | "flying" | "done" } | null}
+ * @returns {{
+ *   mode: "waiting" | "flying" | "transfer" | "done",
+ *   from: object,
+ *   to: object,
+ *   progress: number,
+ * } | null}
  */
 export function getPersonPlaneState(flights, simUtcMs) {
   if (flights.length === 0) return null;
 
   const sorted = [...flights].sort((a, b) => a.departUtcMs - b.departUtcMs);
+  const first = sorted[0];
 
-  for (const flight of sorted) {
+  if (simUtcMs < first.departUtcMs) {
+    return {
+      mode: "waiting",
+      from: first.from,
+      to: first.to,
+      progress: 0,
+    };
+  }
+
+  for (let i = 0; i < sorted.length; i++) {
+    const flight = sorted[i];
     const { phase, progress } = getFlightState(flight, simUtcMs);
+
     if (phase === "flying") {
-      return { flight, progress, mode: "flying" };
+      return {
+        mode: "flying",
+        from: flight.from,
+        to: flight.to,
+        progress,
+      };
     }
+
     if (phase === "waiting") {
-      return { flight, progress: 0, mode: "waiting" };
+      return {
+        mode: "waiting",
+        from: flight.from,
+        to: flight.to,
+        progress: 0,
+      };
+    }
+
+    const next = sorted[i + 1];
+    if (!next) {
+      return {
+        mode: "done",
+        from: flight.from,
+        to: flight.to,
+        progress: 1,
+      };
+    }
+
+    if (simUtcMs < next.departUtcMs) {
+      const gapMs = next.departUtcMs - flight.arriveUtcMs;
+      const gapProgress =
+        gapMs > 0 ? (simUtcMs - flight.arriveUtcMs) / gapMs : 1;
+
+      const sameAirport =
+        flight.to.iata === next.from.iata &&
+        flight.to.lat === next.from.lat &&
+        flight.to.lon === next.from.lon;
+
+      if (sameAirport) {
+        return {
+          mode: "waiting",
+          from: next.from,
+          to: next.to,
+          progress: 0,
+        };
+      }
+
+      return {
+        mode: "transfer",
+        from: flight.to,
+        to: next.from,
+        progress: Math.min(1, Math.max(0, gapProgress)),
+      };
     }
   }
 
   const last = sorted[sorted.length - 1];
-  return { flight: last, progress: 1, mode: "done" };
+  return {
+    mode: "done",
+    from: last.from,
+    to: last.to,
+    progress: 1,
+  };
 }
 
 /**

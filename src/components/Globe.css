@@ -12,32 +12,38 @@
 .globe-controls {
   position: absolute;
   top: 16px;
-  left: 16px;
+  left: 56px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
   z-index: 10;
   max-width: calc(100% - 80px);
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 16px;
+  padding: 10px;
 }
 
 .globe-controls__group {
   display: flex;
+  flex-direction: column;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: left;
   gap: 8px;
+  width: 100%;
 }
 
 .globe-controls__label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.75);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
 }
 
 .globe-input {
-  padding: 8px 10px;
-  font-size: 13px;
+  padding: 4px;
+  font-size: 12px;
+  font-weight: 500;
   color: #fff;
   background: rgba(26, 26, 46, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -90,8 +96,8 @@
 }
 
 .globe-btn {
-  padding: 10px 20px;
-  font-size: 15px;
+  padding: 8px;
+  font-size: 14px;
   font-weight: 600;
   color: #fff;
   background: rgba(26, 26, 46, 0.85);
@@ -107,8 +113,24 @@
 }
 
 .globe-hint {
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.85);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   pointer-events: none;
+}
+
+.globe-traveler-tooltip {
+  position: absolute;
+  z-index: 15;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  pointer-events: none;
+  background: rgba(26, 26, 46, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }

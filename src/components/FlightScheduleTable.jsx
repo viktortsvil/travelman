@@ -1,5 +1,6 @@
 import { createEmptyFlightRow } from "../utils/flightUtils.js";
 import AirportInput from "./AirportInput.jsx";
+import DateInput from "./DateInput.jsx";
 
 /**
  * Editable flight schedule table (origin/destination + local times).
@@ -50,12 +51,9 @@ export default function FlightScheduleTable({ flights, onChange, errors }) {
                   />
                 </td>
                 <td>
-                  <input
-                    type="date"
+                  <DateInput
                     value={row.fromDate}
-                    onChange={(e) =>
-                      updateRow(row.id, "fromDate", e.target.value)
-                    }
+                    onChange={(value) => updateRow(row.id, "fromDate", value)}
                   />
                 </td>
                 <td>
@@ -77,12 +75,9 @@ export default function FlightScheduleTable({ flights, onChange, errors }) {
                   />
                 </td>
                 <td>
-                  <input
-                    type="date"
+                  <DateInput
                     value={row.toDate}
-                    onChange={(e) =>
-                      updateRow(row.id, "toDate", e.target.value)
-                    }
+                    onChange={(value) => updateRow(row.id, "toDate", value)}
                   />
                 </td>
                 <td>

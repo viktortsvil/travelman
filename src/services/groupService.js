@@ -30,10 +30,11 @@ export async function createGroup(name) {
 }
 
 /** @returns {Promise<{ groupId: string | null, error: Error | null }>} */
-export async function joinGroupByCode(code) {
+export async function joinGroupByCode(name, code) {
   const client = requireClient();
   const { data, error } = await client.rpc("join_group_by_code", {
-    p_code: code,
+    p_name: name.trim(),
+    p_code: code.trim(),
   });
 
   return { groupId: data, error };
@@ -85,6 +86,7 @@ export async function fetchAllFlightRowsForGroup(groupId) {
     .from("flight_rows")
     .select("*")
     .eq("group_id", groupId)
+    .order("user_id")
     .order("sort_order");
 
   return { rows: (data ?? []).map(dbRowToFlightRow), error };
@@ -169,4 +171,31 @@ export async function fetchGroupFlightSummary(groupId) {
     flightsByUser,
     error: null,
   };
+}
+
+/** @returns {Promise<{ members: { userId: string, displayName: string, flightCount: number }[], error: Error | null }>} */
+export async function fetchGroupMembers(groupId) {
+  const client = requireClient();
+
+  const [{ data: memberRows, error: membersError }, { flightsByUser, error: summaryError }] =
+    await Promise.all([
+      client.rpc("list_group_members", { p_group_id: groupId }),
+      fetchGroupFlightSummary(groupId),
+    ]);
+
+  if (membersError) {
+    return { members: [], error: membersError };
+  }
+
+  if (summaryError) {
+    return { members: [], error: summaryError };
+  }
+
+  const members = (memberRows ?? []).map((row) => ({
+    userId: row.user_id,
+    displayName: row.display_name ?? "Traveler",
+    flightCount: flightsByUser.get(row.user_id) ?? 0,
+  }));
+
+  return { members, error: null };
 }

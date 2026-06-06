@@ -1,9 +1,9 @@
-/* Right-side expandable flight schedule panel */
+/* Left-side expandable flight schedule panel */
 
 .flight-panel {
   position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
   height: 100%;
   display: flex;
   z-index: 20;
@@ -27,7 +27,7 @@
   color: #fff;
   background: rgba(26, 26, 46, 0.92);
   border: none;
-  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
   align-self: stretch;
 }
@@ -42,7 +42,7 @@
   overflow: hidden;
   opacity: 0;
   background: rgba(18, 18, 32, 0.96);
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
   color: #e8e8f0;
   display: flex;
   flex-direction: column;
