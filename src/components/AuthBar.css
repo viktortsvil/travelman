@@ -1,0 +1,56 @@
+.auth-bar {
+  position: absolute;
+  top: 16px;
+  right: 72px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(26, 26, 46, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+}
+
+.auth-bar--warn {
+  color: #ffd9a0;
+  max-width: min(320px, calc(100vw - 120px));
+}
+
+.auth-bar--loading {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.auth-bar__user {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-bar__btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(45, 45, 80, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.auth-bar__btn:hover {
+  background: rgba(60, 60, 100, 0.95);
+}
+
+.auth-bar__btn--primary {
+  background: rgba(78, 205, 196, 0.35);
+  border-color: rgba(78, 205, 196, 0.6);
+}
+
+.auth-bar__btn--primary:hover {
+  background: rgba(78, 205, 196, 0.5);
+}

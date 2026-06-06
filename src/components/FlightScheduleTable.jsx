@@ -1,0 +1,127 @@
+import { createEmptyFlightRow } from "../utils/flightUtils.js";
+import AirportInput from "./AirportInput.jsx";
+
+/**
+ * Editable flight schedule table (origin/destination + local times).
+ */
+export default function FlightScheduleTable({ flights, onChange, errors }) {
+  const updateRow = (id, field, value) => {
+    onChange(
+      flights.map((row) =>
+        row.id === id ? { ...row, [field]: value } : row,
+      ),
+    );
+  };
+
+  const addRow = () => {
+    onChange([...flights, createEmptyFlightRow()]);
+  };
+
+  const removeRow = (id) => {
+    if (flights.length <= 1) return;
+    onChange(flights.filter((row) => row.id !== id));
+  };
+
+  return (
+    <>
+      <div className="flight-panel__table-wrap">
+        <table className="flight-panel__table">
+          <thead>
+            <tr>
+              <th>From</th>
+              <th>Depart date</th>
+              <th>Depart time</th>
+              <th>To</th>
+              <th>Arrive date</th>
+              <th>Arrive time</th>
+              <th aria-label="Actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {flights.map((row) => (
+              <tr key={row.id}>
+                <td>
+                  <AirportInput
+                    placeholder="SFO"
+                    value={row.fromLocation}
+                    onChange={(value) =>
+                      updateRow(row.id, "fromLocation", value)
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    type="date"
+                    value={row.fromDate}
+                    onChange={(e) =>
+                      updateRow(row.id, "fromDate", e.target.value)
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    type="time"
+                    value={row.fromTime}
+                    onChange={(e) =>
+                      updateRow(row.id, "fromTime", e.target.value)
+                    }
+                  />
+                </td>
+                <td>
+                  <AirportInput
+                    placeholder="JFK"
+                    value={row.toLocation}
+                    onChange={(value) =>
+                      updateRow(row.id, "toLocation", value)
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    type="date"
+                    value={row.toDate}
+                    onChange={(e) =>
+                      updateRow(row.id, "toDate", e.target.value)
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    type="time"
+                    value={row.toTime}
+                    onChange={(e) =>
+                      updateRow(row.id, "toTime", e.target.value)
+                    }
+                  />
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="flight-panel__remove"
+                    onClick={() => removeRow(row.id)}
+                    disabled={flights.length <= 1}
+                    title="Remove row"
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <button type="button" className="flight-panel__add" onClick={addRow}>
+        + Add flight
+      </button>
+
+      {errors.length > 0 && (
+        <ul className="flight-panel__errors">
+          {errors.map((msg) => (
+            <li key={msg}>{msg}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}

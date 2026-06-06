@@ -1,0 +1,114 @@
+.globe-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.globe-viewer {
+  width: 100%;
+  height: 100%;
+}
+
+.globe-controls {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  z-index: 10;
+  max-width: calc(100% - 80px);
+}
+
+.globe-controls__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.globe-controls__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.globe-input {
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(26, 26, 46, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+}
+
+.globe-input:focus {
+  outline: none;
+  border-color: rgba(100, 180, 255, 0.6);
+}
+
+.globe-sim-time {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  font-variant-numeric: tabular-nums;
+}
+
+.globe-run-error {
+  font-size: 12px;
+  color: #ffb4b4;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.globe-btn--primary {
+  background: rgba(78, 205, 196, 0.35);
+  border-color: rgba(78, 205, 196, 0.6);
+}
+
+.globe-btn--primary:hover {
+  background: rgba(78, 205, 196, 0.5);
+}
+
+.globe-hint--interactive {
+  pointer-events: auto;
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+.globe-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.globe-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.globe-btn {
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(26, 26, 46, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background 0.15s;
+}
+
+.globe-btn:hover {
+  background: rgba(45, 45, 80, 0.95);
+}
+
+.globe-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
