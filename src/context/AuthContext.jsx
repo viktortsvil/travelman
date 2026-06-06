@@ -21,7 +21,10 @@ export function AuthProvider({ children }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      // Token auto-refresh on tab focus updates the client internally; skipping
+      // React state avoids re-fetching trips, globe entities, and avatars.
+      if (event === "TOKEN_REFRESHED") return;
       setSession(nextSession);
       setLoading(false);
     });

@@ -8,6 +8,14 @@ import { resolveAllFlights } from "./utils/flightUtils.js";
 import { utcDateTimeToMs, utcMsToDateStr, utcMsToTimeStr } from "./utils/timeUtils.js";
 import "./App.css";
 
+function mapsEqual(a, b) {
+  if (a.size !== b.size) return false;
+  for (const [key, value] of a) {
+    if (b.get(key) !== value) return false;
+  }
+  return true;
+}
+
 export default function App() {
   const { user, configured } = useAuth();
 
@@ -159,8 +167,11 @@ export default function App() {
   ]);
 
   const handleMembersChange = useCallback((names, avatars) => {
-    setTravelerNames(names);
-    setTravelerAvatars(avatars ?? new Map());
+    const nextAvatars = avatars ?? new Map();
+    setTravelerNames((prev) => (mapsEqual(prev, names) ? prev : names));
+    setTravelerAvatars((prev) =>
+      mapsEqual(prev, nextAvatars) ? prev : nextAvatars,
+    );
   }, []);
 
   const handleGroupSummaryChange = useCallback((memberCount, flightCount) => {

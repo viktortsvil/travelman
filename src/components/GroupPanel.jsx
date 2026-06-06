@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   createGroup,
@@ -51,7 +51,7 @@ export default function GroupPanel({
   const [saving, setSaving] = useState(false);
 
   const refreshGroups = useCallback(async () => {
-    if (!user || !configured) return;
+    if (!user?.id || !configured) return;
 
     setLoadingGroups(true);
     const { groups: nextGroups, error } = await fetchMyGroups();
@@ -63,11 +63,11 @@ export default function GroupPanel({
     }
 
     setGroups(nextGroups.map(dbGroupToUi));
-  }, [user, configured]);
+  }, [user?.id, configured]);
 
   const refreshGroupData = useCallback(
     async (groupId) => {
-      if (!groupId || !user) {
+      if (!groupId || !user?.id) {
         setMemberCount(0);
         setTotalFlights(0);
         setMembers([]);
@@ -127,8 +127,11 @@ export default function GroupPanel({
         onGroupChange?.(uiGroup);
       }
     },
-    [user, onGroupChange, onGroupSummaryChange, onMembersChange],
+    [user?.id, onGroupChange, onGroupSummaryChange, onMembersChange],
   );
+
+  const refreshGroupDataRef = useRef(refreshGroupData);
+  refreshGroupDataRef.current = refreshGroupData;
 
   useEffect(() => {
     refreshGroups();
@@ -163,13 +166,13 @@ export default function GroupPanel({
       const uiGroup = dbGroupToUi(group);
       setActiveGroup(uiGroup);
       onGroupChange?.(uiGroup);
-      await refreshGroupData(selectedGroupId);
+      await refreshGroupDataRef.current(selectedGroupId);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedGroupId, onGroupChange, refreshGroupData]);
+  }, [selectedGroupId, onGroupChange]);
 
   const handleCreateGroup = async () => {
     const name = newGroupName.trim();

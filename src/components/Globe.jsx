@@ -42,6 +42,14 @@ import "./Globe.css";
 
 const HUD_UPDATE_MS = 250;
 
+function mapsEqual(a, b) {
+  if (a.size !== b.size) return false;
+  for (const [key, value] of a) {
+    if (b.get(key) !== value) return false;
+  }
+  return true;
+}
+
 export default function Globe({
   resolvedFlights,
   seekUtcMs,
@@ -121,9 +129,11 @@ export default function Globe({
     applyBillboardImage(entity, marker);
   };
 
+  const prevTravelerAvatarsRef = useRef(travelerAvatars);
+
   useEffect(() => {
-    avatarImageCacheRef.current.clear();
-    photoLoadedUsersRef.current.clear();
+    if (mapsEqual(prevTravelerAvatarsRef.current, travelerAvatars)) return;
+    prevTravelerAvatarsRef.current = travelerAvatars;
 
     for (const [userId, avatarUrl] of travelerAvatars) {
       if (!avatarUrl) continue;
