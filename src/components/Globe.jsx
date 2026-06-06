@@ -13,6 +13,7 @@ import {
   ColorMaterialProperty,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
+  VerticalOrigin,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
@@ -32,6 +33,10 @@ import {
   travelerMarkerImage,
   tryLoadTravelerAvatar,
 } from "../utils/avatarUtils.js";
+import {
+  loadGentlemanHatImage,
+  NORTH_POLE_HAT_BILLBOARD_PX,
+} from "../utils/gentlemanHat.js";
 import DateInput from "./DateInput.jsx";
 import "./Globe.css";
 
@@ -87,6 +92,13 @@ export default function Globe({
   travelerAvatarsRef.current = travelerAvatars;
 
   const requestAvatarForUser = (userId, entity) => {
+    const target = entity ?? planeEntitiesRef.current.get(userId);
+    const cached = avatarImageCacheRef.current.get(userId);
+    if (photoLoadedUsersRef.current.has(userId) && cached) {
+      applyBillboardImage(target, cached);
+      return;
+    }
+
     const avatarUrl = travelerAvatarsRef.current.get(userId) ?? null;
     tryLoadTravelerAvatar({
       userId,
@@ -110,6 +122,9 @@ export default function Globe({
   };
 
   useEffect(() => {
+    avatarImageCacheRef.current.clear();
+    photoLoadedUsersRef.current.clear();
+
     for (const [userId, avatarUrl] of travelerAvatars) {
       if (!avatarUrl) continue;
       requestAvatarForUser(userId, planeEntitiesRef.current.get(userId));
@@ -147,8 +162,6 @@ export default function Globe({
     entityKeysRef.current = [];
     personPlaneRef.current = {};
     planeEntitiesRef.current.clear();
-    avatarImageCacheRef.current.clear();
-    photoLoadedUsersRef.current.clear();
     setHoveredTravelers(null);
 
     const flightsByUser = groupFlightsByUser(resolvedFlights);
@@ -302,6 +315,23 @@ export default function Globe({
 
     viewerRef.current = viewer;
     viewer.canvas.style.imageRendering = "auto";
+
+    loadGentlemanHatImage().then((hatImage) => {
+      if (viewer.isDestroyed()) return;
+
+      viewer.entities.add({
+        id: "north-pole-hat",
+        position: Cartesian3.fromDegrees(0, 90, 0),
+        billboard: {
+          image: hatImage,
+          width: NORTH_POLE_HAT_BILLBOARD_PX,
+          height: Math.round(NORTH_POLE_HAT_BILLBOARD_PX * (148 / 128)),
+          verticalOrigin: VerticalOrigin.BOTTOM,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+      viewer.scene.requestRender();
+    });
 
     const hoverHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     hoverHandler.setInputAction((movement) => {

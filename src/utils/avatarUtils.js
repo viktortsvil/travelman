@@ -2,7 +2,7 @@ export const AVATAR_BILLBOARD_PX = 48;
 
 const TEXTURE_SIZE = 128;
 const inflight = new Set();
-const MIN_AVATAR_PX = 48;
+const MIN_AVATAR_PX = 32;
 
 function markerFillColor(color) {
   const normalized = String(color ?? "").toLowerCase();
@@ -88,7 +88,16 @@ function photoMarkerDataUrl(img) {
   ctx.lineWidth = borderWidth;
   ctx.stroke();
 
-  return canvas.toDataURL("image/png");
+  try {
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
+function finishLoad(key, onSuccess, image) {
+  inflight.delete(key);
+  if (image) onSuccess(image);
 }
 
 /**
@@ -109,12 +118,26 @@ export function tryLoadTravelerAvatar({
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.onload = () => {
-    if (!isValidAvatarImage(img)) return;
+    if (!isValidAvatarImage(img)) {
+      finishLoad(key, onSuccess, null);
+      return;
+    }
+
     const photo = photoMarkerDataUrl(img);
-    if (photo) onSuccess(photo);
+    // Canvas crop when CORS allows; otherwise pass URL straight to Cesium.
+    finishLoad(key, onSuccess, photo ?? avatarUrl);
   };
   img.onerror = () => {
-    // Keep initials — no retry
+    const fallback = new Image();
+    fallback.onload = () => {
+      if (!isValidAvatarImage(fallback)) {
+        finishLoad(key, onSuccess, null);
+        return;
+      }
+      finishLoad(key, onSuccess, avatarUrl);
+    };
+    fallback.onerror = () => finishLoad(key, onSuccess, null);
+    fallback.src = avatarUrl;
   };
   img.src = avatarUrl;
 }
