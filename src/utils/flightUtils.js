@@ -22,7 +22,7 @@ export const ARC_PEAK_M = 4_000;
 
 /** Distinct plane colors (Cesium CSS color strings). */
 export const PLANE_COLORS = [
-  "#ffffff",
+  "#60a5fa",
   "#ff6b6b",
   "#4ecdc4",
   "#ffe66d",
@@ -127,6 +127,36 @@ export function resolveFlightRow(row, index) {
       label: `${from.iata} → ${to.iata}`,
     },
     errors: [],
+  };
+}
+
+/** 3 hours before the earliest group departure → shared trip start (UTC). */
+export const TRIP_START_LEAD_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Shared trip start in UTC ms: earliest departure in the group minus 3 hours.
+ * @returns {number | null}
+ */
+export function computeGroupTripStartUtcMs(flights) {
+  if (flights.length === 0) return null;
+  const earliestDepartUtcMs = Math.min(...flights.map((f) => f.departUtcMs));
+  return earliestDepartUtcMs - TRIP_START_LEAD_MS;
+}
+
+/**
+ * Resolve all saved rows and compute trip start fields for the groups table.
+ * @returns {{ utcMs: number, simDate: string, simTime: string } | null}
+ */
+export function computeGroupTripStartFromRows(rows) {
+  const { flights } = resolveAllFlights(rows);
+  const utcMs = computeGroupTripStartUtcMs(flights);
+  if (utcMs == null || Number.isNaN(utcMs)) return null;
+
+  const iso = new Date(utcMs).toISOString();
+  return {
+    utcMs,
+    simDate: iso.slice(0, 10),
+    simTime: iso.slice(11, 19),
   };
 }
 

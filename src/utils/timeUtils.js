@@ -206,8 +206,8 @@ export function utcMsToDateStr(ms) {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-/** UTC ms → "HH:MM:SS" for time inputs. */
+/** UTC ms → "HH:MM" for time inputs. */
 export function utcMsToTimeStr(ms) {
   if (ms == null || Number.isNaN(ms)) return "";
-  return new Date(ms).toISOString().slice(11, 19);
+  return new Date(ms).toISOString().slice(11, 16);
 }

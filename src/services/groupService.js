@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { computeGroupTripStartFromRows } from "../utils/flightUtils.js";
 import { dbRowToFlightRow, flightRowToDbRow } from "../utils/tripMappers.js";
 
 function requireClient() {
@@ -120,6 +121,39 @@ export async function saveMyFlightsForGroup(groupId, userId, rows) {
 }
 
 /**
+ * Recompute trip start from all saved flights in the group (earliest departure − 3 h UTC).
+ * @returns {Promise<{ simDate: string | null, simTime: string | null, skipped: boolean, error: Error | null }>}
+ */
+export async function syncGroupTripStartFromFlights(groupId) {
+  const { rows, error } = await fetchAllFlightRowsForGroup(groupId);
+  if (error) {
+    return { simDate: null, simTime: null, skipped: false, error };
+  }
+
+  const start = computeGroupTripStartFromRows(rows);
+  if (!start) {
+    return { simDate: null, simTime: null, skipped: true, error: null };
+  }
+
+  const { error: updateError } = await updateGroupSimSettings(
+    groupId,
+    start.simDate,
+    start.simTime,
+  );
+
+  if (updateError) {
+    return { simDate: null, simTime: null, skipped: false, error: updateError };
+  }
+
+  return {
+    simDate: start.simDate,
+    simTime: start.simTime,
+    skipped: false,
+    error: null,
+  };
+}
+
+/**
  * @returns {Promise<{
  *   memberCount: number,
  *   totalFlights: number,
@@ -173,7 +207,7 @@ export async function fetchGroupFlightSummary(groupId) {
   };
 }
 
-/** @returns {Promise<{ members: { userId: string, displayName: string, flightCount: number }[], error: Error | null }>} */
+/** @returns {Promise<{ members: { userId: string, displayName: string, avatarUrl: string | null, flightCount: number }[], error: Error | null }>} */
 export async function fetchGroupMembers(groupId) {
   const client = requireClient();
 
@@ -194,6 +228,7 @@ export async function fetchGroupMembers(groupId) {
   const members = (memberRows ?? []).map((row) => ({
     userId: row.user_id,
     displayName: row.display_name ?? "Traveler",
+    avatarUrl: row.avatar_url ?? null,
     flightCount: flightsByUser.get(row.user_id) ?? 0,
   }));
 

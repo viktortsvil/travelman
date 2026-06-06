@@ -5,7 +5,15 @@ import DateInput from "./DateInput.jsx";
 /**
  * Editable flight schedule table (origin/destination + local times).
  */
-export default function FlightScheduleTable({ flights, onChange, errors }) {
+export default function FlightScheduleTable({
+  flights,
+  onChange,
+  onSave,
+  saving = false,
+  loadingFlights = false,
+  dirty = false,
+  errors,
+}) {
   const updateRow = (id, field, value) => {
     onChange(
       flights.map((row) =>
@@ -104,11 +112,22 @@ export default function FlightScheduleTable({ flights, onChange, errors }) {
             ))}
           </tbody>
         </table>
+        <div className="flight-panel__bottom-controls">
+          <button type="button" className="flight-panel__add" onClick={addRow}>
+            + Add flight
+          </button>
+          <button
+            type="button"
+            className="group-panel__btn group-panel__btn--primary"
+            onClick={onSave}
+            disabled={saving || loadingFlights}
+          >
+            {saving ? "Saving…" : dirty ? "Save flights" : "Saved"}
+          </button>
+        </div>
       </div>
 
-      <button type="button" className="flight-panel__add" onClick={addRow}>
-        + Add flight
-      </button>
+
 
       {errors.length > 0 && (
         <ul className="flight-panel__errors">

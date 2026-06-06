@@ -6,7 +6,12 @@ import "./DateInput.css";
  * Date field that stores YYYY-MM-DD, displays e.g. "Jan 1, 1970",
  * accepts typed dates, and still opens the native picker from the calendar button.
  */
-export default function DateInput({ value, onChange, placeholder = "Jan 1, 2026" }) {
+export default function DateInput({
+  value,
+  onChange,
+  placeholder = "Jan 1, 2026",
+  disabled = false,
+}) {
   const nativeRef = useRef(null);
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState(() =>
@@ -36,6 +41,7 @@ export default function DateInput({ value, onChange, placeholder = "Jan 1, 2026"
   };
 
   const openPicker = () => {
+    if (disabled) return;
     const input = nativeRef.current;
     if (!input) return;
     if (typeof input.showPicker === "function") {
@@ -46,12 +52,13 @@ export default function DateInput({ value, onChange, placeholder = "Jan 1, 2026"
   };
 
   return (
-    <div className="date-input">
+    <div className={`date-input ${disabled ? "date-input--disabled" : ""}`}>
       <input
         type="text"
         className="date-input__text"
         value={text}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(e) => setText(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => {
@@ -78,6 +85,7 @@ export default function DateInput({ value, onChange, placeholder = "Jan 1, 2026"
         onClick={openPicker}
         title="Open calendar"
         aria-label="Open calendar"
+        disabled={disabled}
       >
         <span aria-hidden="true">📅</span>
       </button>

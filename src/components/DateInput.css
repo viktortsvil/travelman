@@ -48,8 +48,17 @@
   cursor: pointer;
 }
 
-.date-input__picker:hover {
+.date-input__picker:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.date-input--disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.date-input--disabled .date-input__text {
+  cursor: not-allowed;
 }
 
 .date-input__native {

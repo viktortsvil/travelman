@@ -9,6 +9,10 @@
   height: 100%;
 }
 
+/* .globe-viewer canvas {
+  image-rendering: auto;
+} */
+
 .globe-controls {
   position: absolute;
   top: 16px;
@@ -38,6 +42,59 @@
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
   margin: 0;
+}
+
+.globe-controls__datetime-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 168px;
+}
+
+.globe-controls__datetime-row .date-input,
+.globe-controls__time {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.globe-controls__datetime-row .date-input {
+  min-width: 0;
+}
+
+.globe-controls__datetime-row .date-input__picker {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
+
+.globe-controls__time {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.globe-controls__time:focus {
+  outline: none;
+  border-color: rgba(100, 180, 255, 0.6);
+}
+
+.globe-controls__time:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.globe-controls__time::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
+.globe-controls__time:disabled::-webkit-calendar-picker-indicator {
+  cursor: not-allowed;
 }
 
 .globe-input {
@@ -126,11 +183,37 @@
   font-size: 13px;
   font-weight: 600;
   color: #fff;
-  white-space: nowrap;
   pointer-events: none;
   background: rgba(26, 26, 46, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 6px;
   backdrop-filter: blur(8px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.globe-traveler-tooltip__name {
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.globe-traveler-tooltip__name + .globe-traveler-tooltip__name {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+.globe-hints {
+  position: absolute;
+  bottom: 36px;
+  left: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  z-index: 10;
+  max-width: calc(100% - 80px);
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 16px;
+  padding: 10px;
+  cursor: pointer;
+  user-select: none;
 }

@@ -17,7 +17,7 @@ export default function MembersModal({ open, onClose, members }) {
         onClick={(e) => e.stopPropagation()}
       >
         <header className="members-modal__header">
-          <h3 id="members-modal-title">Group members</h3>
+          <h3 id="members-modal-title">Trip travelers</h3>
           <button
             type="button"
             className="members-modal__close"
@@ -29,7 +29,7 @@ export default function MembersModal({ open, onClose, members }) {
         </header>
 
         {members.length === 0 ? (
-          <p className="members-modal__empty">No members yet.</p>
+          <p className="members-modal__empty">No travelers yet.</p>
         ) : (
           <ul className="members-modal__list">
             {members.map((member) => (

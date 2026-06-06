@@ -59,12 +59,17 @@
 }
 
 .flight-panel__header {
-  padding: 20px 20px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 16px 0px;
   flex-shrink: 0;
 }
 
-.flight-panel__header h2 {
-  margin: 0 0 8px;
+.flight-panel__header h2,
+.group-panel__header h2 {
+  margin: 0;
   font-size: 18px;
   font-weight: 600;
 }
@@ -118,6 +123,11 @@
   border-color: rgba(100, 180, 255, 0.6);
 }
 
+.flight-panel__table input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
 .flight-panel__remove {
   width: 28px;
   height: 28px;
@@ -158,6 +168,15 @@
   background: rgba(78, 205, 196, 0.4);
 }
 
+.flight-panel__bottom-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 .flight-panel__errors {
   margin: 0 20px 20px;
   padding: 12px 16px;
@@ -170,6 +189,6 @@
   border-radius: 6px;
 }
 
-.flight-panel__errors li + li {
+.flight-panel__errors li+li {
   margin-top: 4px;
 }

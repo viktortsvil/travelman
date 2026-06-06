@@ -24,30 +24,16 @@ import {
 } from "../utils/flightUtils.js";
 import {
   buildRoutePositions,
-  headingForPersonState,
   positionForPersonState,
-  surfaceNormalAt,
-  unwrapRotation,
 } from "../utils/geoUtils.js";
+import {
+  AVATAR_BILLBOARD_PX,
+  applyBillboardImage,
+  travelerMarkerImage,
+  tryLoadTravelerAvatar,
+} from "../utils/avatarUtils.js";
+import DateInput from "./DateInput.jsx";
 import "./Globe.css";
-
-const planeSvgCache = new Map();
-function planeSvg(color) {
-  if (!planeSvgCache.has(color)) {
-    planeSvgCache.set(
-      color,
-      `data:image/svg+xml,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <g transform="translate(32 32)">
-    <path fill="${color}" stroke="#1a1a2e" stroke-width="2"
-      d="M0 -24 L6 8 L22 14 L22 20 L6 16 L0 24 L-6 16 L-22 20 L-22 14 L-6 8 Z"/>
-  </g>
-</svg>
-`)}`,
-    );
-  }
-  return planeSvgCache.get(color);
-}
 
 const HUD_UPDATE_MS = 250;
 
@@ -62,10 +48,12 @@ export default function Globe({
   onTripTimeChange,
   onTripClockChange,
   onPlayPause,
+  tripTimeLocked = false,
   runErrors,
   runDisabled = false,
   runHint,
   travelerNames = new Map(),
+  travelerAvatars = new Map(),
 }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -81,13 +69,60 @@ export default function Globe({
   const flightsByUserRef = useRef(new Map());
   const userColorsRef = useRef(new Map());
   const travelerNamesRef = useRef(travelerNames);
+  const travelerAvatarsRef = useRef(travelerAvatars);
+  const avatarImageCacheRef = useRef(new Map());
+  const photoLoadedUsersRef = useRef(new Set());
+  const planeEntitiesRef = useRef(new Map());
   const entityKeysRef = useRef([]);
-  const planeRotationRef = useRef(new Map());
 
-  const [hoveredTraveler, setHoveredTraveler] = useState(null);
+  const [hoveredTravelers, setHoveredTravelers] = useState(null);
+  const [hintsVisible, setHintsVisible] = useState(true);
+
+  const hideOrShowHints = () => {
+    setHintsVisible((visible) => !visible);
+  };
 
   playingRef.current = playing;
   travelerNamesRef.current = travelerNames;
+  travelerAvatarsRef.current = travelerAvatars;
+
+  const requestAvatarForUser = (userId, entity) => {
+    const avatarUrl = travelerAvatarsRef.current.get(userId) ?? null;
+    tryLoadTravelerAvatar({
+      userId,
+      avatarUrl,
+      onSuccess: (image) => {
+        photoLoadedUsersRef.current.add(userId);
+        avatarImageCacheRef.current.set(userId, image);
+        applyBillboardImage(entity ?? planeEntitiesRef.current.get(userId), image);
+        viewerRef.current?.scene.requestRender();
+      },
+    });
+  };
+
+  const updateInitialsMarker = (userId, entity) => {
+    if (photoLoadedUsersRef.current.has(userId)) return;
+    const displayName = travelerNamesRef.current.get(userId) ?? "Unknown Traveler";
+    const color = userColorsRef.current.get(userId) ?? "#4ecdc4";
+    const marker = travelerMarkerImage(displayName, color);
+    avatarImageCacheRef.current.set(userId, marker);
+    applyBillboardImage(entity, marker);
+  };
+
+  useEffect(() => {
+    for (const [userId, avatarUrl] of travelerAvatars) {
+      if (!avatarUrl) continue;
+      requestAvatarForUser(userId, planeEntitiesRef.current.get(userId));
+    }
+  }, [travelerAvatars]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    for (const [userId, entity] of planeEntitiesRef.current) {
+      updateInitialsMarker(userId, entity);
+    }
+    viewer?.scene.requestRender();
+  }, [travelerNames]);
 
   useEffect(() => {
     if (seekUtcMs == null) return;
@@ -111,8 +146,10 @@ export default function Globe({
     }
     entityKeysRef.current = [];
     personPlaneRef.current = {};
-    planeRotationRef.current.clear();
-    setHoveredTraveler(null);
+    planeEntitiesRef.current.clear();
+    avatarImageCacheRef.current.clear();
+    photoLoadedUsersRef.current.clear();
+    setHoveredTravelers(null);
 
     const flightsByUser = groupFlightsByUser(resolvedFlights);
     const userColors = assignUserColors([...flightsByUser.keys()]);
@@ -189,12 +226,13 @@ export default function Globe({
       });
     }
 
-    for (const [userId, flights] of flightsByUser) {
-      const color = userColors.get(userId) ?? "#ffffff";
+    for (const [userId] of flightsByUser) {
+      const color = userColors.get(userId) ?? "#4ecdc4";
+      const displayName = travelerNamesRef.current.get(userId) ?? "Unknown Traveler";
       const planeId = `plane-${userId}`;
       entityKeysRef.current.push(planeId);
 
-      viewer.entities.add({
+      const entity = viewer.entities.add({
         id: planeId,
         show: new CallbackProperty(
           () => personPlaneRef.current[userId] != null,
@@ -205,29 +243,18 @@ export default function Globe({
           return positionForPersonState(state) ?? Cartesian3.ZERO;
         }, false),
         billboard: {
-          image: planeSvg(color),
-          width: 48,
-          height: 48,
-          rotation: new CallbackProperty(() => {
-            const state = personPlaneRef.current[userId];
-            if (!state) return 0;
-            const heading = headingForPersonState(state);
-            const rotation = unwrapRotation(
-              planeRotationRef.current.get(userId),
-              heading,
-            );
-            planeRotationRef.current.set(userId, rotation);
-            return rotation;
-          }, false),
-          alignedAxis: new CallbackProperty(() => {
-            const state = personPlaneRef.current[userId];
-            const position = positionForPersonState(state);
-            if (!position) return Cartesian3.UNIT_Z;
-            return surfaceNormalAt(position);
-          }, false),
+          image:
+            avatarImageCacheRef.current.get(userId) ??
+            travelerMarkerImage(displayName, color),
+          width: AVATAR_BILLBOARD_PX,
+          height: AVATAR_BILLBOARD_PX,
+          color: Color.WHITE.withAlpha(0.7),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
+
+      planeEntitiesRef.current.set(userId, entity);
+      requestAvatarForUser(userId, entity);
     }
 
     viewer.scene.requestRender();
@@ -274,28 +301,46 @@ export default function Globe({
     });
 
     viewerRef.current = viewer;
+    viewer.canvas.style.imageRendering = "auto";
 
     const hoverHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     hoverHandler.setInputAction((movement) => {
-      const picked = viewer.scene.pick(movement.endPosition);
-      const entityId = picked?.id?.id;
-      if (typeof entityId === "string" && entityId.startsWith("plane-")) {
+      const pickedObjects = viewer.scene.drillPick(movement.endPosition, 32);
+      const names = [];
+      const seenUserIds = new Set();
+
+      for (const picked of pickedObjects) {
+        const entityId = picked?.id?.id;
+        if (typeof entityId !== "string" || !entityId.startsWith("plane-")) {
+          continue;
+        }
+
         const userId = entityId.slice("plane-".length);
-        setHoveredTraveler({
+        if (seenUserIds.has(userId)) continue;
+        seenUserIds.add(userId);
+
+        names.push({
+          userId,
           name: travelerNamesRef.current.get(userId) ?? "Traveler",
+        });
+      }
+
+      if (names.length > 0) {
+        setHoveredTravelers({
+          travelers: names,
           x: movement.endPosition.x,
           y: movement.endPosition.y,
         });
         viewer.canvas.style.cursor = "pointer";
       } else {
-        setHoveredTraveler(null);
+        setHoveredTravelers(null);
         viewer.canvas.style.cursor = "";
       }
     }, ScreenSpaceEventType.MOUSE_MOVE);
     clickHandlerRef.current = hoverHandler;
 
     const clearHover = () => {
-      setHoveredTraveler(null);
+      setHoveredTravelers(null);
       if (!viewer.isDestroyed()) {
         viewer.canvas.style.cursor = "";
       }
@@ -358,21 +403,23 @@ export default function Globe({
       ? "Resume"
       : "Run";
 
-  const tripStartLocked = playing;
-
   return (
     <div className="globe-root">
       <div ref={containerRef} className="globe-viewer" />
 
-      {hoveredTraveler && (
+      {hoveredTravelers && (
         <div
           className="globe-traveler-tooltip"
           style={{
-            left: hoveredTraveler.x + 14,
-            top: hoveredTraveler.y + 14,
+            left: hoveredTravelers.x + 14,
+            top: hoveredTravelers.y + 14,
           }}
         >
-          {hoveredTraveler.name}
+          {hoveredTravelers.travelers.map(({ userId, name }) => (
+            <div key={userId} className="globe-traveler-tooltip__name">
+              {name}
+            </div>
+          ))}
         </div>
       )}
 
@@ -381,23 +428,25 @@ export default function Globe({
           <p className="globe-controls__label">
             {tripActive ? "Trip time (UTC)" : "Trip start (UTC)"}
           </p>
-          <input
-            type="date"
-            className="globe-input"
-            value={tripDate}
-            onChange={(e) => onTripDateChange(e.target.value)}
-            disabled={tripStartLocked}
-            title={tripStartLocked ? "Pause the trip to change time" : undefined}
-          />
-          <input
-            type="time"
-            className="globe-input"
-            value={tripTime}
-            step="1"
-            onChange={(e) => onTripTimeChange(e.target.value)}
-            disabled={tripStartLocked}
-            title={tripStartLocked ? "Pause the trip to change time" : undefined}
-          />
+          <div className="globe-controls__datetime-row">
+            <DateInput
+              value={tripDate}
+              onChange={onTripDateChange}
+              disabled={tripTimeLocked}
+            />
+            <input
+              type="time"
+              className="globe-controls__time"
+              value={tripTime}
+              onChange={(e) => onTripTimeChange?.(e.target.value)}
+              disabled={tripTimeLocked}
+              title={
+                tripTimeLocked
+                  ? "Pause the trip to change time"
+                  : "Local playback time — not saved to the trip"
+              }
+            />
+          </div>
           <button
             type="button"
             className="globe-btn globe-btn--primary"
@@ -411,20 +460,30 @@ export default function Globe({
         {runErrors.length > 0 && (
           <div className="globe-run-error">{runErrors[0]}</div>
         )}
+      </div>
 
-        {runHint && (
-          <p className="globe-hint globe-controls__label globe-hint--interactive">{runHint}</p>
+      <div className="globe-hints" onClick={hideOrShowHints}>
+        {hintsVisible ? (
+          <>
+            {runHint && (
+              <p className="globe-hint globe-controls__label globe-hint--interactive">
+                {runHint}
+              </p>
+            )}
+
+            <p className="globe-hint globe-controls__label">
+              Drag to rotate · Scroll to zoom
+            </p>
+            <p className="globe-hint globe-controls__label">
+              1 h trip time = 1 s real time
+            </p>
+            <p className="globe-hint globe-controls__label">
+              Hover travelers to see their names
+            </p>
+          </>
+        ) : (
+          <p className="globe-hint globe-controls__label">Click to show hints</p>
         )}
-
-        <p className="globe-hint globe-controls__label">
-          Drag to rotate · Scroll to zoom
-        </p>
-        <p className="globe-hint globe-controls__label">
-          1 h trip time = 1 s real time
-        </p>
-        <p className="globe-hint globe-controls__label">
-          Hover a plane to see who it is
-        </p>
       </div>
     </div>
   );

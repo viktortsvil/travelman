@@ -3,10 +3,7 @@ import AuthBar from "./components/AuthBar";
 import Globe from "./components/Globe";
 import GroupPanel from "./components/GroupPanel";
 import { useAuth } from "./context/AuthContext.jsx";
-import {
-  fetchAllFlightRowsForGroup,
-  updateGroupSimSettings,
-} from "./services/groupService.js";
+import { fetchAllFlightRowsForGroup } from "./services/groupService.js";
 import { resolveAllFlights } from "./utils/flightUtils.js";
 import { utcDateTimeToMs, utcMsToDateStr, utcMsToTimeStr } from "./utils/timeUtils.js";
 import "./App.css";
@@ -18,9 +15,12 @@ export default function App() {
   const [groupMemberCount, setGroupMemberCount] = useState(0);
   const [groupFlightCount, setGroupFlightCount] = useState(0);
   const [travelerNames, setTravelerNames] = useState(new Map());
+  const [travelerAvatars, setTravelerAvatars] = useState(new Map());
 
   const [tripDate, setTripDate] = useState("");
   const [tripTime, setTripTime] = useState("06:00");
+  const [globeDate, setGlobeDate] = useState("");
+  const [globeTime, setGlobeTime] = useState("06:00");
 
   const [resolvedFlights, setResolvedFlights] = useState([]);
   const [resolveErrors, setResolveErrors] = useState([]);
@@ -38,8 +38,12 @@ export default function App() {
     if (activeGroup) {
       setTripDate(activeGroup.simDate);
       setTripTime(activeGroup.simTime);
+      if (!playing && seekUtcMs == null) {
+        setGlobeDate(activeGroup.simDate);
+        setGlobeTime(activeGroup.simTime || "06:00");
+      }
     }
-  }, [activeGroup?.id, activeGroup?.simDate, activeGroup?.simTime]);
+  }, [activeGroup?.simDate, activeGroup?.simTime, activeGroup?.id, playing, seekUtcMs]);
 
   useEffect(() => {
     pauseClockMsRef.current = null;
@@ -47,41 +51,25 @@ export default function App() {
     setTripClockUtcMs(null);
     setPlaying(false);
     setResolvedFlights([]);
+    if (activeGroup) {
+      setGlobeDate(activeGroup.simDate);
+      setGlobeTime(activeGroup.simTime || "06:00");
+    } else {
+      setGlobeDate("");
+      setGlobeTime("06:00");
+    }
   }, [activeGroup?.id]);
-
-  const persistTripStart = useCallback(
-    async (date, time) => {
-      if (!activeGroup) return;
-      await updateGroupSimSettings(activeGroup.id, date, time);
-      setActiveGroup((group) =>
-        group ? { ...group, simDate: date, simTime: time } : group,
-      );
-    },
-    [activeGroup],
-  );
-
-  const handleTripDateChange = useCallback(
-    (date) => {
-      setTripDate(date);
-      if (!playing) {
-        persistTripStart(date, tripTime);
-      }
-    },
-    [tripTime, persistTripStart, playing],
-  );
-
-  const handleTripTimeChange = useCallback(
-    (time) => {
-      setTripTime(time);
-      if (!playing) {
-        persistTripStart(tripDate, time);
-      }
-    },
-    [tripDate, persistTripStart, playing],
-  );
 
   const handleTripClockChange = useCallback((ms) => {
     setTripClockUtcMs(ms);
+  }, []);
+
+  const handleGlobeDateChange = useCallback((date) => {
+    setGlobeDate(date);
+  }, []);
+
+  const handleGlobeTimeChange = useCallback((time) => {
+    setGlobeTime(time);
   }, []);
 
   const handleRun = useCallback(async () => {
@@ -91,7 +79,7 @@ export default function App() {
     }
 
     if (!activeGroup) {
-      setRunErrors(["Select or join a group first."]);
+      setRunErrors(["Select or join a trip first."]);
       return;
     }
 
@@ -113,13 +101,13 @@ export default function App() {
     }
 
     if (flights.length === 0) {
-      setRunErrors(["Add and save at least one flight in the group."]);
+      setRunErrors(["Add and save at least one flight in the trip."]);
       return;
     }
 
-    const startMs = utcDateTimeToMs(tripDate, tripTime);
+    const startMs = utcDateTimeToMs(globeDate, globeTime);
     if (Number.isNaN(startMs)) {
-      setRunErrors(["Invalid trip start date/time."]);
+      setRunErrors(["Trip start is not set yet — save flights in the panel first."]);
       return;
     }
 
@@ -129,14 +117,14 @@ export default function App() {
     setSeekUtcMs(startMs);
     setTripClockUtcMs(startMs);
     setPlaying(true);
-  }, [user, configured, activeGroup, tripDate, tripTime]);
+  }, [user, configured, activeGroup, globeDate, globeTime]);
 
   const handlePlayPause = useCallback(async () => {
     if (playing) {
       if (tripClockUtcMs != null) {
         pauseClockMsRef.current = tripClockUtcMs;
-        setTripDate(utcMsToDateStr(tripClockUtcMs));
-        setTripTime(utcMsToTimeStr(tripClockUtcMs));
+        setGlobeDate(utcMsToDateStr(tripClockUtcMs));
+        setGlobeTime(utcMsToTimeStr(tripClockUtcMs));
       }
       setPlaying(false);
       return;
@@ -147,29 +135,33 @@ export default function App() {
       return;
     }
 
-    const configuredStartMs = utcDateTimeToMs(tripDate, tripTime);
-    if (Number.isNaN(configuredStartMs)) {
-      setRunErrors(["Invalid trip start date/time."]);
+    const seekMs = utcDateTimeToMs(globeDate, globeTime);
+    if (Number.isNaN(seekMs)) {
+      setRunErrors(["Invalid trip time."]);
       return;
     }
 
     setRunErrors([]);
-    if (configuredStartMs !== pauseClockMsRef.current) {
-      setSeekUtcMs(configuredStartMs);
-      setTripClockUtcMs(configuredStartMs);
-      pauseClockMsRef.current = configuredStartMs;
+    if (seekMs !== pauseClockMsRef.current) {
+      setSeekUtcMs(seekMs);
+      setTripClockUtcMs(seekMs);
+      pauseClockMsRef.current = seekMs;
     }
-
     setPlaying(true);
   }, [
     playing,
     seekUtcMs,
     resolvedFlights.length,
-    tripDate,
-    tripTime,
     tripClockUtcMs,
+    globeDate,
+    globeTime,
     handleRun,
   ]);
+
+  const handleMembersChange = useCallback((names, avatars) => {
+    setTravelerNames(names);
+    setTravelerAvatars(avatars ?? new Map());
+  }, []);
 
   const handleGroupSummaryChange = useCallback((memberCount, flightCount) => {
     setGroupMemberCount(memberCount);
@@ -177,14 +169,14 @@ export default function App() {
   }, []);
 
   const tripActive = seekUtcMs != null;
-  const displayTripDate =
+  const globeDisplayDate =
     playing && tripClockUtcMs != null
       ? utcMsToDateStr(tripClockUtcMs)
-      : tripDate;
-  const displayTripTime =
+      : globeDate;
+  const globeDisplayTime =
     playing && tripClockUtcMs != null
       ? utcMsToTimeStr(tripClockUtcMs)
-      : tripTime;
+      : globeTime;
 
   const runHint =
     activeGroup && groupFlightCount > 0
@@ -204,16 +196,18 @@ export default function App() {
         seekUtcMs={seekUtcMs}
         playing={playing}
         tripActive={tripActive}
-        tripDate={displayTripDate}
-        tripTime={displayTripTime}
-        onTripDateChange={handleTripDateChange}
-        onTripTimeChange={handleTripTimeChange}
+        tripDate={globeDisplayDate}
+        tripTime={globeDisplayTime}
+        onTripDateChange={handleGlobeDateChange}
+        onTripTimeChange={handleGlobeTimeChange}
+        tripTimeLocked={playing}
         onTripClockChange={handleTripClockChange}
         onPlayPause={handlePlayPause}
         runErrors={runErrors}
         runDisabled={running || !activeGroup}
         runHint={runHint}
         travelerNames={travelerNames}
+        travelerAvatars={travelerAvatars}
       />
 
       <GroupPanel
@@ -222,12 +216,9 @@ export default function App() {
         errors={resolveErrors}
         onGroupChange={setActiveGroup}
         onGroupSummaryChange={handleGroupSummaryChange}
-        onMembersChange={setTravelerNames}
+        onMembersChange={handleMembersChange}
         tripDate={tripDate}
         tripTime={tripTime}
-        onTripDateChange={handleTripDateChange}
-        onTripTimeChange={handleTripTimeChange}
-        tripStartLocked={playing}
       />
     </div>
   );

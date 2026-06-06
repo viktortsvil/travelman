@@ -9,14 +9,15 @@ import {
   fetchMyGroups,
   joinGroupByCode,
   saveMyFlightsForGroup,
+  syncGroupTripStartFromFlights,
 } from "../services/groupService.js";
 import { dbGroupToUi } from "../utils/tripMappers.js";
 import { createEmptyFlightRow } from "../utils/flightUtils.js";
+import { formatDateForDisplay } from "../utils/timeUtils.js";
 import FlightScheduleTable from "./FlightScheduleTable.jsx";
 import MembersModal from "./MembersModal.jsx";
 import "./FlightPanel.css";
 import "./GroupPanel.css";
-
 export default function GroupPanel({
   open,
   onToggleOpen,
@@ -26,9 +27,6 @@ export default function GroupPanel({
   onMembersChange,
   tripDate,
   tripTime,
-  onTripDateChange,
-  onTripTimeChange,
-  tripStartLocked = false,
 }) {
   const { user, configured, signInWithGoogle } = useAuth();
 
@@ -74,7 +72,7 @@ export default function GroupPanel({
         setTotalFlights(0);
         setMembers([]);
         onGroupSummaryChange?.(0, 0);
-        onMembersChange?.(new Map());
+        onMembersChange?.(new Map(), new Map());
         return;
       }
 
@@ -97,7 +95,7 @@ export default function GroupPanel({
           rowsError?.message ??
           summaryError?.message ??
           membersError?.message ??
-          "Failed to load group",
+          "Failed to load trip",
         );
         return;
       }
@@ -117,9 +115,19 @@ export default function GroupPanel({
       const nameMap = new Map(
         memberList.map((member) => [member.userId, member.displayName]),
       );
-      onMembersChange?.(nameMap);
+      const avatarMap = new Map(
+        memberList.map((member) => [member.userId, member.avatarUrl]),
+      );
+      onMembersChange?.(nameMap, avatarMap);
+
+      const { group, error: groupError } = await fetchGroup(groupId);
+      if (!groupError && group) {
+        const uiGroup = dbGroupToUi(group);
+        setActiveGroup(uiGroup);
+        onGroupChange?.(uiGroup);
+      }
     },
-    [user, onGroupSummaryChange, onMembersChange],
+    [user, onGroupChange, onGroupSummaryChange, onMembersChange],
   );
 
   useEffect(() => {
@@ -148,7 +156,7 @@ export default function GroupPanel({
       if (cancelled) return;
 
       if (error || !group) {
-        setPanelError(error?.message ?? "Group not found");
+        setPanelError(error?.message ?? "Trip not found");
         return;
       }
 
@@ -166,7 +174,7 @@ export default function GroupPanel({
   const handleCreateGroup = async () => {
     const name = newGroupName.trim();
     if (!name) {
-      setPanelError("Enter a group name.");
+      setPanelError("Enter a trip name.");
       return;
     }
 
@@ -179,7 +187,7 @@ export default function GroupPanel({
 
     setNewGroupName("");
     setStatusMessage(
-      `Created "${group.name}". Share the group name and code ${group.join_code}.`,
+      `Created "${group.name}". Share the trip name and code ${group.join_code}.`,
     );
     await refreshGroups();
     setSelectedGroupId(group.id);
@@ -189,7 +197,7 @@ export default function GroupPanel({
     const name = joinGroupName.trim();
     const code = joinCode.trim();
     if (!name) {
-      setPanelError("Enter the group name.");
+      setPanelError("Enter the trip name.");
       return;
     }
     if (!code) {
@@ -206,7 +214,7 @@ export default function GroupPanel({
 
     setJoinGroupName("");
     setJoinCode("");
-    setStatusMessage("Joined group.");
+    setStatusMessage("Joined trip.");
     await refreshGroups();
     setSelectedGroupId(groupId);
   };
@@ -230,6 +238,12 @@ export default function GroupPanel({
       return;
     }
 
+    const { error: syncError } = await syncGroupTripStartFromFlights(activeGroup.id);
+    if (syncError) {
+      setPanelError(syncError.message);
+      return;
+    }
+
     setStatusMessage("Flights saved.");
     setDirty(false);
     await refreshGroupData(activeGroup.id);
@@ -242,7 +256,7 @@ export default function GroupPanel({
 
   const renderSignedOut = () => (
     <div className="group-panel__empty">
-      <p>Sign in to create or join a group and add your flights.</p>
+      <p>Sign in to create or join a trip and add your flights.</p>
       {configured ? (
         <button
           type="button"
@@ -253,7 +267,7 @@ export default function GroupPanel({
         </button>
       ) : (
         <p className="group-panel__hint">
-          Add Supabase env vars to enable groups.
+          Add Supabase env vars to enable trips.
         </p>
       )}
     </div>
@@ -262,41 +276,13 @@ export default function GroupPanel({
   const renderGroupSetup = () => (
     <section className="group-panel__section">
       <p className="group-panel__step-intro">
-        Pick an existing group, start a new one, or join friends with their group name and code.
+        Pick an existing trip, start a new one, or join friends with their trip name and code.
       </p>
 
       <div className="group-panel__section--list">
 
         <div className="group-panel__card">
-          <h3 className="group-panel__card-title">1. Select a group</h3>
-          <p className="group-panel__card-hint">
-            Choose one of your groups to view and edit your flights.
-          </p>
-          <select
-            id="group-select"
-            className="group-panel__select"
-            value={selectedGroupId}
-            onChange={(e) => {
-              setSelectedGroupId(e.target.value);
-              setPanelError("");
-              setStatusMessage("");
-            }}
-            disabled={loadingGroups || groups.length === 0}
-          >
-            {groups.length === 0 ? (
-              <option value="">No groups yet — create or join below</option>
-            ) : (
-              groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-
-        <div className="group-panel__card">
-          <h3 className="group-panel__card-title">2. Create a group</h3>
+          <h3 className="group-panel__card-title">Create a trip</h3>
           <p className="group-panel__card-hint">
             Start a new shared trip and share the join code with others.
           </p>
@@ -313,20 +299,49 @@ export default function GroupPanel({
               className="group-panel__btn group-panel__btn--primary"
               onClick={handleCreateGroup}
             >
-              Create group
+              Create trip
             </button>
           </div>
         </div>
 
         <div className="group-panel__card">
-          <h3 className="group-panel__card-title">3. Join a group</h3>
+          <h3 className="group-panel__card-title">Select a trip</h3>
           <p className="group-panel__card-hint">
+            Choose one of your trips to view and edit your flights.
+          </p>
+          <select
+            id="trip-select"
+            className="group-panel__select"
+            value={selectedGroupId}
+            onChange={(e) => {
+              setSelectedGroupId(e.target.value);
+              setPanelError("");
+              setStatusMessage("");
+            }}
+            disabled={loadingGroups || groups.length === 0}
+          >
+            {groups.length === 0 ? (
+              <option value="">No trips yet — create or join below</option>
+            ) : (
+              groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+
+        <div className="group-panel__card">
+          <h3 className="group-panel__card-title">Join a trip</h3>
+          <p className="group-panel__card-hint">
+            Enter the exact trip name and join code from a friend.
           </p>
           <div className="group-panel__join-fields">
             <input
               type="text"
               className="group-panel__input"
-              placeholder="Group name"
+              placeholder="Trip name"
               value={joinGroupName}
               onChange={(e) => setJoinGroupName(e.target.value)}
             />
@@ -343,11 +358,12 @@ export default function GroupPanel({
                 className="group-panel__btn"
                 onClick={handleJoinGroup}
               >
-                Join group
+                Join trip
               </button>
             </div>
           </div>
         </div>
+
       </div>
     </section>
   );
@@ -360,67 +376,36 @@ export default function GroupPanel({
         <section className="group-panel__section">
           <div className="group-panel__meta">
             <div>
-              <p>
+              <header className="group-panel__header">
+                <h2>Current trip info</h2>
+              </header>
+              <p className="group-panel__hint">Trip name: {activeGroup.name}</p>
+
+              <p className="group-panel__hint">
                 Join code:{" "}
                 <strong className="group-panel__code">{activeGroup.joinCode}</strong>
               </p>
               <p className="group-panel__hint">
-                {memberCount} traveler{memberCount === 1 ? "" : "s"},{" "}
-                {totalFlights} flight{totalFlights === 1 ? "" : "s"} total.
+                <a onClick={() => setShowMembersModal(true)} className="group-panel__link">
+                  {memberCount} traveler{memberCount === 1 ? "" : "s"},{" "}
+                  {totalFlights} flight{totalFlights === 1 ? "" : "s"} total.
+                </a>
+              </p>
+              <p className="group-panel__hint">
+                Trip start (UTC): {tripDate && tripTime
+                  ? `${formatDateForDisplay(tripDate)} ${tripTime} UTC`
+                  : "Save flights to set automatically"}
               </p>
             </div>
-            <button
-              type="button"
-              className="group-panel__btn group-panel__btn--link"
-              onClick={() => setShowMembersModal(true)}
-            >
-              View travelers
-            </button>
-          </div>
-
-          <div className="group-panel__row group-panel__row--split">
-            <label className="group-panel__label" htmlFor="group-trip-date">
-              Trip start (UTC)
-            </label>
-            <input
-              id="group-trip-date"
-              type="date"
-              className="group-panel__input group-panel__input--compact"
-              value={tripDate}
-              onChange={(e) => onTripDateChange(e.target.value)}
-              disabled={tripStartLocked}
-              title={
-                tripStartLocked ? "Pause the trip to change start time" : undefined
-              }
-            />
-            <input
-              type="time"
-              className="group-panel__input group-panel__input--compact"
-              value={tripTime}
-              onChange={(e) => onTripTimeChange(e.target.value)}
-              disabled={tripStartLocked}
-              title={
-                tripStartLocked ? "Pause the trip to change start time" : undefined
-              }
-            />
           </div>
         </section>
 
         <section className="group-panel__section">
-          <div className="group-panel__section-header">
-            <h3 className="group-panel__subtitle">My flights</h3>
-            <button
-              type="button"
-              className="group-panel__btn group-panel__btn--primary"
-              onClick={handleSaveFlights}
-              disabled={saving || loadingFlights}
-            >
-              {saving ? "Saving…" : dirty ? "Save flights" : "Saved"}
-            </button>
-          </div>
+          <header className="group-panel__header">
+            <h2>My flights</h2>
+          </header>
           <p className="group-panel__hint group-panel__hint--inline">
-            Each row is a flight. If your next departure airport differs from
-            where you landed, the map shows you traveling there between flights.
+            Each row is a flight. All dates and times are in airport's local timezone.
           </p>
         </section>
 
@@ -432,6 +417,10 @@ export default function GroupPanel({
           <FlightScheduleTable
             flights={flightRows}
             onChange={handleFlightRowsChange}
+            onSave={handleSaveFlights}
+            saving={saving}
+            loadingFlights={loadingFlights}
+            dirty={dirty}
             errors={errors}
           />
         )}
@@ -449,24 +438,27 @@ export default function GroupPanel({
           aria-expanded={open}
           title={open ? "Collapse panel" : "Expand panel"}
         >
-          Groups
+          Trips
         </button>
 
         <div className="flight-panel__body">
-          <header className="flight-panel__header">
-            <h2>Groups</h2>
-            <p className="flight-panel__hint">
-              Select, create, or join a group, add your flights, save, then Run
-              to watch the whole trip together.
-            </p>
-          </header>
+            <header className="flight-panel__header">
+              <h2>Trips</h2>
+              <button
+                type="button"
+                className="group-panel__btn"
+                onClick={onToggleOpen}
+              >
+                Back
+              </button>
+            </header>
 
           {!user ? renderSignedOut() : (
             <>
               {renderGroupSetup()}
               {selectedGroupId ? renderActiveGroup() : groups.length === 0 && (
                 <div className="group-panel__empty">
-                  <p>Create a group or join with a code to get started.</p>
+                  <p>Create a trip or join with a code to get started.</p>
                 </div>
               )}
             </>
