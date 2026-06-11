@@ -1,6 +1,20 @@
+import { useState } from "react";
 import { createEmptyFlightRow } from "../utils/flightUtils.js";
 import AirportInput from "./AirportInput.jsx";
 import DateInput from "./DateInput.jsx";
+
+function reorderRows(rows, fromId, toId) {
+  if (fromId === toId) return rows;
+
+  const fromIndex = rows.findIndex((row) => row.id === fromId);
+  const toIndex = rows.findIndex((row) => row.id === toId);
+  if (fromIndex < 0 || toIndex < 0) return rows;
+
+  const next = [...rows];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
 
 /**
  * Editable flight schedule table (origin/destination + local times).
@@ -14,6 +28,9 @@ export default function FlightScheduleTable({
   dirty = false,
   errors,
 }) {
+  const [draggedId, setDraggedId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
+
   const updateRow = (id, field, value) => {
     onChange(
       flights.map((row) =>
@@ -31,12 +48,40 @@ export default function FlightScheduleTable({
     onChange(flights.filter((row) => row.id !== id));
   };
 
+  const handleDragStart = (event, id) => {
+    setDraggedId(id);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", id);
+  };
+
+  const handleDragOver = (event, id) => {
+    event.preventDefault();
+    if (id !== draggedId) {
+      setDragOverId(id);
+    }
+  };
+
+  const handleDrop = (event, id) => {
+    event.preventDefault();
+    if (draggedId && draggedId !== id) {
+      onChange(reorderRows(flights, draggedId, id));
+    }
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
   return (
     <>
       <div className="flight-panel__table-wrap">
         <table className="flight-panel__table">
           <thead>
             <tr>
+              <th aria-label="Reorder" />
               <th>From</th>
               <th>Depart date</th>
               <th>Depart time</th>
@@ -48,7 +93,31 @@ export default function FlightScheduleTable({
           </thead>
           <tbody>
             {flights.map((row) => (
-              <tr key={row.id}>
+              <tr
+                key={row.id}
+                className={
+                  row.id === draggedId
+                    ? "flight-panel__row--dragging"
+                    : row.id === dragOverId
+                      ? "flight-panel__row--drag-over"
+                      : undefined
+                }
+                onDragOver={(event) => handleDragOver(event, row.id)}
+                onDrop={(event) => handleDrop(event, row.id)}
+              >
+                <td className="flight-panel__drag-cell">
+                  <button
+                    type="button"
+                    className="flight-panel__drag-handle"
+                    draggable
+                    onDragStart={(event) => handleDragStart(event, row.id)}
+                    onDragEnd={handleDragEnd}
+                    title="Drag to reorder"
+                    aria-label="Drag to reorder"
+                  >
+                    ⋮⋮
+                  </button>
+                </td>
                 <td>
                   <AirportInput
                     placeholder="SFO"

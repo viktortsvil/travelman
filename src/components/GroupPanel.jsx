@@ -12,7 +12,7 @@ import {
   syncGroupTripStartFromFlights,
 } from "../services/groupService.js";
 import { dbGroupToUi } from "../utils/tripMappers.js";
-import { createEmptyFlightRow } from "../utils/flightUtils.js";
+import { createEmptyFlightRow, resolveAllFlights } from "../utils/flightUtils.js";
 import { formatDateForDisplay } from "../utils/timeUtils.js";
 import FlightScheduleTable from "./FlightScheduleTable.jsx";
 import MembersModal from "./MembersModal.jsx";
@@ -21,7 +21,6 @@ import "./GroupPanel.css";
 export default function GroupPanel({
   open,
   onToggleOpen,
-  errors,
   onGroupChange,
   onGroupSummaryChange,
   onMembersChange,
@@ -35,6 +34,7 @@ export default function GroupPanel({
   const [activeGroup, setActiveGroup] = useState(null);
 
   const [flightRows, setFlightRows] = useState([createEmptyFlightRow()]);
+  const [flightErrors, setFlightErrors] = useState([]);
   const [dirty, setDirty] = useState(false);
   const [memberCount, setMemberCount] = useState(0);
   const [totalFlights, setTotalFlights] = useState(0);
@@ -101,6 +101,7 @@ export default function GroupPanel({
       }
 
       setFlightRows(rows.length > 0 ? rows : [createEmptyFlightRow()]);
+      setFlightErrors([]);
       setDirty(false);
       setMemberCount(membersTotal);
       setTotalFlights(flights);
@@ -148,6 +149,7 @@ export default function GroupPanel({
       setActiveGroup(null);
       onGroupChange?.(null);
       setFlightRows([createEmptyFlightRow()]);
+      setFlightErrors([]);
       setDirty(false);
       return;
     }
@@ -225,8 +227,17 @@ export default function GroupPanel({
   const handleSaveFlights = async () => {
     if (!activeGroup || !user) return;
 
+    const { errors } = resolveAllFlights(flightRows);
+    if (errors.length > 0) {
+      setFlightErrors(errors);
+      setPanelError("Fix the flight schedule errors below before saving.");
+      setStatusMessage("");
+      return;
+    }
+
     setSaving(true);
     setPanelError("");
+    setFlightErrors([]);
 
     const { error } = await saveMyFlightsForGroup(
       activeGroup.id,
@@ -255,6 +266,8 @@ export default function GroupPanel({
   const handleFlightRowsChange = (rows) => {
     setFlightRows(rows);
     setDirty(true);
+    setFlightErrors([]);
+    setPanelError("");
   };
 
   const renderSignedOut = () => (
@@ -424,7 +437,7 @@ export default function GroupPanel({
             saving={saving}
             loadingFlights={loadingFlights}
             dirty={dirty}
-            errors={errors}
+            errors={flightErrors}
           />
         )}
       </>

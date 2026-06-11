@@ -37,7 +37,6 @@ export default function App() {
   const [globeUtcMs, setGlobeUtcMs] = useState(null);
 
   const [resolvedFlights, setResolvedFlights] = useState([]);
-  const [resolveErrors, setResolveErrors] = useState([]);
   const [runErrors, setRunErrors] = useState([]);
 
   const [seekUtcMs, setSeekUtcMs] = useState(null);
@@ -115,13 +114,11 @@ export default function App() {
       if (cancelled) return;
 
       if (error) {
-        setResolveErrors([error.message]);
         setResolvedFlights([]);
         return;
       }
 
-      const { flights, errors } = resolveAllFlights(rows);
-      setResolveErrors(errors);
+      const { flights } = resolveAllFlights(rows);
       setResolvedFlights(flights);
     })();
 
@@ -208,13 +205,7 @@ export default function App() {
       return;
     }
 
-    const { flights, errors } = resolveAllFlights(rows);
-    setResolveErrors(errors);
-
-    if (errors.length > 0) {
-      setRunErrors(["Fix schedule errors in the panel before running."]);
-      return;
-    }
+    const { flights } = resolveAllFlights(rows);
 
     if (flights.length === 0) {
       setRunErrors(["Add and save at least one flight in the trip."]);
@@ -351,7 +342,6 @@ export default function App() {
       <GroupPanel
         open={panelOpen}
         onToggleOpen={() => setPanelOpen((o) => !o)}
-        errors={resolveErrors}
         onGroupChange={setActiveGroup}
         onGroupSummaryChange={handleGroupSummaryChange}
         onMembersChange={handleMembersChange}
