@@ -52,6 +52,7 @@ function mapsEqual(a, b) {
 
 export default function Globe({
   resolvedFlights,
+  viewUtcMs,
   seekUtcMs,
   playing,
   tripActive = false,
@@ -61,6 +62,13 @@ export default function Globe({
   onTripTimeChange,
   onTripClockChange,
   onPlayPause,
+  onSeekBack2h,
+  onSeekForward2h,
+  onSkipToNext,
+  onSkipToPrevious,
+  navDisabled = false,
+  skipToNextDisabled = false,
+  skipToPreviousDisabled = false,
   tripTimeLocked = false,
   runErrors,
   runDisabled = false,
@@ -150,17 +158,16 @@ export default function Globe({
   }, [travelerNames]);
 
   useEffect(() => {
-    if (seekUtcMs == null) return;
+    if (viewUtcMs == null || playing) return;
 
-    tripTimeRef.current = seekUtcMs;
-    onTripClockChange?.(seekUtcMs);
+    tripTimeRef.current = viewUtcMs;
 
     for (const [userId, flights] of flightsByUserRef.current) {
-      personPlaneRef.current[userId] = getPersonPlaneState(flights, seekUtcMs);
+      personPlaneRef.current[userId] = getPersonPlaneState(flights, viewUtcMs);
     }
 
     viewerRef.current?.scene.requestRender();
-  }, [seekUtcMs, onTripClockChange]);
+  }, [viewUtcMs, playing]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -179,7 +186,7 @@ export default function Globe({
     flightsByUserRef.current = flightsByUser;
     userColorsRef.current = userColors;
 
-    const tripUtcMs = tripTimeRef.current ?? seekUtcMs;
+    const tripUtcMs = tripTimeRef.current ?? viewUtcMs;
     for (const [userId, flights] of flightsByUser) {
       if (tripUtcMs != null) {
         personPlaneRef.current[userId] = getPersonPlaneState(flights, tripUtcMs);
@@ -281,7 +288,7 @@ export default function Globe({
     }
 
     viewer.scene.requestRender();
-  }, [resolvedFlights, seekUtcMs]);
+  }, [resolvedFlights]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -495,6 +502,50 @@ export default function Globe({
           >
             {playPauseLabel}
           </button>
+
+          <div className="globe-controls__nav-row">
+            <button
+              type="button"
+              className="globe-btn globe-btn--nav"
+              onClick={onSkipToPrevious}
+              disabled={skipToPreviousDisabled}
+              title="Skip to the previous event"
+              aria-label="Skip to the previous event"
+            >
+              «
+            </button>
+            <button
+              type="button"
+              className="globe-btn globe-btn--nav"
+              onClick={onSeekBack2h}
+              disabled={navDisabled}
+              title="Go back 2 hours"
+              aria-label="Go back 2 hours"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              className="globe-btn globe-btn--nav"
+              onClick={onSeekForward2h}
+              disabled={navDisabled}
+              title="Go forward 2 hours"
+              aria-label="Go forward 2 hours"
+            >
+              ›
+            </button>
+
+            <button
+              type="button"
+              className="globe-btn globe-btn--nav"
+              onClick={onSkipToNext}
+              disabled={skipToNextDisabled}
+              title="Skip to the next event"
+              aria-label="Skip to the next event"
+            >
+              »
+            </button>
+          </div>
         </div>
 
         {runErrors.length > 0 && (

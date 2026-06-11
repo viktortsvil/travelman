@@ -133,6 +133,51 @@ export function resolveFlightRow(row, index) {
 /** 3 hours before the earliest group departure → shared trip start (UTC). */
 export const TRIP_START_LEAD_MS = 3 * 60 * 60 * 1000;
 
+/** Two hours in UTC milliseconds. */
+export const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Next simulation event (departure or arrival) strictly after `currentUtcMs`.
+ * @returns {number | null}
+ */
+export function findNextEventUtcMs(flights, currentUtcMs) {
+  if (flights.length === 0 || currentUtcMs == null || Number.isNaN(currentUtcMs)) {
+    return null;
+  }
+
+  let nextMs = null;
+  for (const flight of flights) {
+    for (const eventMs of [flight.departUtcMs, flight.arriveUtcMs]) {
+      if (eventMs > currentUtcMs && (nextMs == null || eventMs < nextMs)) {
+        nextMs = eventMs;
+      }
+    }
+  }
+
+  return nextMs;
+}
+
+/**
+ * Previous simulation event (departure or arrival) strictly before `currentUtcMs`.
+ * @returns {number | null}
+ */
+export function findPreviousEventUtcMs(flights, currentUtcMs) {
+  if (flights.length === 0 || currentUtcMs == null || Number.isNaN(currentUtcMs)) {
+    return null;
+  }
+
+  let prevMs = null;
+  for (const flight of flights) {
+    for (const eventMs of [flight.departUtcMs, flight.arriveUtcMs]) {
+      if (eventMs < currentUtcMs && (prevMs == null || eventMs > prevMs)) {
+        prevMs = eventMs;
+      }
+    }
+  }
+
+  return prevMs;
+}
+
 /**
  * Shared trip start in UTC ms: earliest departure in the group minus 3 hours.
  * @returns {number | null}

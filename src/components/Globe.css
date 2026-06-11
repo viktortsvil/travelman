@@ -136,6 +136,20 @@
   background: rgba(78, 205, 196, 0.5);
 }
 
+.globe-controls__nav-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.globe-btn--nav {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 16px;
+  line-height: 1;
+}
+
 .globe-hint--interactive {
   pointer-events: auto;
   max-width: 320px;
